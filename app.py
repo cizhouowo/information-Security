@@ -1,12 +1,20 @@
+import os
 from flask import Flask, jsonify, request
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from flask_sqlalchemy import SQLAlchemy
 import bcrypt
 import html
 
+# JWT signing key comes from an environment variable. A hard-coded fallback keeps
+# local development working, but production must always set JWT_SECRET_KEY.
 app = Flask(__name__)
-app.config["JWT_SECRET_KEY"] = "super-secret-key-change-me-in-real-prod"
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
+# RFC 7518 recommends >= 32 bytes for HMAC-SHA256. Fallback is long enough to
+# avoid the weak-key warning; production must override via env var regardless.
+app.config["JWT_SECRET_KEY"] = os.getenv(
+    "JWT_SECRET_KEY",
+    "dev-secret-not-for-production-please-override-xxxxxxxxxxxxxxxx",
+)
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("DATABASE_URL", 'sqlite:///app.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 jwt = JWTManager(app)
@@ -28,14 +36,19 @@ with app.app_context():
 
 @app.route("/auth/login", methods=["POST"])
 def login():
-    data = request.get_json()
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify(msg="Request body must be valid JSON"), 400
     username = data.get("username")
     password_raw = data.get("password")
+    if not username or not isinstance(username, str) or not isinstance(password_raw, str):
+        return jsonify(msg="username and password are required"), 400
     user = User.query.filter_by(username=username).first()
+    # Use parameterized query (SQLAlchemy ORM) - immune to SQL injection.
     if user and bcrypt.checkpw(password_raw.encode("utf-8"), user.password_hash):
         token = create_access_token(identity=user.username)
         return jsonify(access_token=token), 200
-    return jsonify(msg="Bad login or password"),401
+    return jsonify(msg="Bad login or password"), 401
 
 @app.route("/api/data", methods=["GET"])
 @jwt_required()
@@ -54,4 +67,7 @@ def profile():
     return jsonify(username=name, note="protected profile info")
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    # Debug mode exposes the interactive debugger and the Werkzeug console which
+    # can lead to remote code execution (see CVE-2018-1000656 in the report).
+    # Kept behind an explicit FLASK_DEBUG=1 so it defaults to OFF in production.
+    app.run(debug=os.getenv("FLASK_DEBUG") == "1")

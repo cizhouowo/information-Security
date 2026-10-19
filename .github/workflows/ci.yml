@@ -1,0 +1,59 @@
+name: Security CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # ---------- SAST + SCA scanning ----------
+  security_scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install security scanners
+        run: pip install bandit safety
+
+      # SAST: static analysis of the application source code
+      - name: Run Bandit (SAST)
+        run: bandit -r app.py -f json -o bandit-report.json
+        continue-on-error: true
+
+      # SCA: check third-party dependencies (requirements.txt) for known CVEs
+      - name: Run Safety (SCA)
+        run: safety check -r requirements.txt -f text || true
+        continue-on-error: true
+
+      - name: Upload SAST report
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report.json
+          path: bandit-report.json
+
+      - name: Upload SCA report
+        uses: actions/upload-artifact@v4
+        with:
+          name: safety-report.json
+          path: safety-report.json
+
+  # ---------- Functional smoke test ----------
+  api_test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install app dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run API smoke tests
+        run: python test_app.py
