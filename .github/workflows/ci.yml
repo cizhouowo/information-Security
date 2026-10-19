@@ -25,8 +25,9 @@ jobs:
         continue-on-error: true
 
       # SCA: check third-party dependencies (requirements.txt) for known CVEs
+      # --save-json writes the machine-readable report consumed by the artifact step
       - name: Run Safety (SCA)
-        run: safety check -r requirements.txt -f text || true
+        run: safety check -r requirements.txt --save-json safety-report.json || true
         continue-on-error: true
 
       - name: Upload SAST report
