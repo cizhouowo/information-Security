@@ -50,6 +50,9 @@ TOKEN=$(curl -s -X POST http://127.0.0.1:5000/auth/login \
 curl http://127.0.0.1:5000/api/data -H "Authorization: Bearer $TOKEN"
 ```
 
+![API smoke test with curl](screenshots/3_api_curl.png)
+*Figure 1 - `curl` against the local API: no token -> 401, login -> JWT, valid token -> 200.*
+
 Run the smoke tests with:
 
 ```bash
@@ -106,11 +109,13 @@ Both scanner JSON reports (`bandit-report.json`, `safety-report.json`) are attac
 Actions artifacts. The job currently reports **0 issues** from Bandit and **0 reported
 vulnerabilities** from Safety.
 
-**Latest successful pipeline run:**
-<https://github.com/cizhouowo/information-Security/actions>
+**Latest successful pipeline run:** <https://github.com/cizhouowo/information-Security/actions/workflows/ci.yml>
 
-> Screenshots of the latest pipeline run (Actions → Security CI) are embedded in the
-> submitted PDF report.
+![GitHub Actions - all jobs green](screenshots/1_ci_green.png)
+*Figure 2 - `security_scan` (Bandit + Safety) and `api_test` both pass on the latest push.*
+
+![Bandit SAST report](screenshots/2_bandit_sast.png)
+*Figure 3 - Bandit (SAST) reports no issues; the JSON report is uploaded as an Actions artifact.*
 
 ---
 
@@ -163,8 +168,14 @@ confirming code execution as `www-data`:
 RCE_OKuid=33(www-data) gid=33(www-data) groups=33(www-data)
 ```
 
+![Vulnerable container running](screenshots/4_cve_up.png)
+*Figure 4 - The Vulhub `php:5.4.1-cgi` container running on port 18080.*
+
 (The payload also ran `uname -a` → the container kernel banner, and
 `cat /etc/hostname` → the container ID, all executing as `www-data`.)
+
+![RCE reproduced](screenshots/5_cve_reproduced.png)
+*Figure 5 - Injected PHP executes: `RCE_OK` and the `id` output as `www-data` (uid=33).*
 
 ### 4.3 Root-cause analysis
 
@@ -235,6 +246,9 @@ the filter rejects only malformed CGI-style query strings and does not break nor
 | `GET /index.php?-s`              | source leaked    | **403**        |
 | RCE payload (`system("id")`)     | `uid=33(www-data)`| **403**, no exec |
 | benign `GET /?name=Hoy`          | 200              | **200**        |
+
+![Patch verified](screenshots/6_fix_verified.png)
+*Figure 6 - Patched build: both attack requests return 403 while the benign request still returns 200.*
 
 Files for this CVE live under [`cve-fix/`](cve-fix/):
 `docker-compose.vulnerable.yml` (the unmodified Vulhub environment used for
